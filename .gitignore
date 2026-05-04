@@ -1,0 +1,7 @@
+.next/
+node_modules/
+.env.local
+.env
+data/dashboard.json
+*.log
+.DS_Store
