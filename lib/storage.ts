@@ -15,19 +15,27 @@ function defaultData(): DashboardData {
   };
 }
 
-// ── Vercel KV ────────────────────────────────────────────────────────────────
+// ── Upstash Redis ─────────────────────────────────────────────────────────────
 
-async function kvGet(): Promise<DashboardData | null> {
-  const { kv } = await import("@vercel/kv");
-  return kv.get<DashboardData>(KV_KEY);
+function getRedis() {
+  const { Redis } = require("@upstash/redis") as typeof import("@upstash/redis");
+  return new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
 }
 
-async function kvSet(data: DashboardData): Promise<void> {
-  const { kv } = await import("@vercel/kv");
-  await kv.set(KV_KEY, data);
+async function redisGet(): Promise<DashboardData | null> {
+  const redis = getRedis();
+  return redis.get<DashboardData>(KV_KEY);
 }
 
-// ── Local file fallback (dev only) ───────────────────────────────────────────
+async function redisSet(data: DashboardData): Promise<void> {
+  const redis = getRedis();
+  await redis.set(KV_KEY, data);
+}
+
+// ── Local file fallback (dev without Redis) ───────────────────────────────────
 
 function localPath() {
   const path = require("path") as typeof import("path");
@@ -37,8 +45,7 @@ function localPath() {
 function localGet(): DashboardData | null {
   try {
     const fs = require("fs") as typeof import("fs");
-    const raw = fs.readFileSync(localPath(), "utf-8");
-    return JSON.parse(raw) as DashboardData;
+    return JSON.parse(fs.readFileSync(localPath(), "utf-8")) as DashboardData;
   } catch {
     return null;
   }
@@ -53,16 +60,18 @@ function localSet(data: DashboardData): void {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+function hasRedis() {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 export async function getData(): Promise<DashboardData> {
-  if (process.env.KV_REST_API_URL) {
-    return (await kvGet()) ?? defaultData();
-  }
+  if (hasRedis()) return (await redisGet()) ?? defaultData();
   return localGet() ?? defaultData();
 }
 
 export async function setData(data: DashboardData): Promise<void> {
-  if (process.env.KV_REST_API_URL) {
-    await kvSet(data);
+  if (hasRedis()) {
+    await redisSet(data);
   } else {
     localSet(data);
   }

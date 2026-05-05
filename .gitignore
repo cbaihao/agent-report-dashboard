@@ -5,3 +5,4 @@ node_modules/
 data/dashboard.json
 *.log
 .DS_Store
+.vercel
