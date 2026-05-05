@@ -1,6 +1,10 @@
 import { getData } from "@/lib/storage";
 import type { Thesis, AgentTask, HumanTodo, ThesisStatus, AgentTaskStatus, TodoPriority } from "@/lib/types";
 import RefreshTicker from "@/components/RefreshTicker";
+import { MagicCard } from "@/components/ui/magic-card";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { ShineBorder } from "@/components/ui/shine-border";
+import { AnimatedGradientText } from "@/components/ui/animated-gradient-text";
 
 // Force dynamic rendering so each request reads fresh KV data
 export const dynamic = "force-dynamic";
@@ -24,9 +28,9 @@ function roiScore(t: Thesis): number {
 }
 
 function roiColor(score: number) {
-  if (score >= 8) return { badge: "bg-emerald-950 text-emerald-300 border border-emerald-800", bar: "bg-emerald-500", border: "border-l-emerald-500" };
-  if (score >= 5) return { badge: "bg-amber-950 text-amber-300 border border-amber-800", bar: "bg-amber-500", border: "border-l-amber-500" };
-  return { badge: "bg-zinc-800 text-zinc-400 border border-zinc-700", bar: "bg-zinc-600", border: "border-l-zinc-700" };
+  if (score >= 8) return { badge: "bg-emerald-950 text-emerald-300 border border-emerald-800", bar: "bg-emerald-500", borderL: "border-l-emerald-500", gradient: "#052e16" };
+  if (score >= 5) return { badge: "bg-amber-950 text-amber-300 border border-amber-800", bar: "bg-amber-500", borderL: "border-l-amber-500", gradient: "#2d1b00" };
+  return { badge: "bg-zinc-800 text-zinc-400 border border-zinc-700", bar: "bg-zinc-600", borderL: "border-l-zinc-700", gradient: "#1a1a1a" };
 }
 
 const STATUS_LABEL: Record<ThesisStatus, string> = {
@@ -65,15 +69,15 @@ const TEAM_LABEL: Record<string, string> = {
 
 // ── Priority helpers ──────────────────────────────────────────────────────────
 
-const P_BORDER: Record<TodoPriority, string> = {
-  P1: "border-l-red-500",
-  P2: "border-l-yellow-500",
-  P3: "border-l-zinc-700",
-};
 const P_BADGE: Record<TodoPriority, string> = {
   P1: "bg-red-950 text-red-400 border border-red-800",
   P2: "bg-yellow-950 text-yellow-400 border border-yellow-800",
   P3: "bg-zinc-800 text-zinc-500 border border-zinc-700",
+};
+const P_BORDER_L: Record<TodoPriority, string> = {
+  P1: "border-l-red-500",
+  P2: "border-l-yellow-500",
+  P3: "border-l-zinc-700",
 };
 
 // ── Formatting ────────────────────────────────────────────────────────────────
@@ -89,7 +93,6 @@ function shortDate(iso?: string) {
 
 function truncate(s: string | undefined, max = 120) {
   if (!s) return null;
-  // Strip session run lines (they clutter the card)
   const clean = s.replace(/\n\[[\d-]+\] Monitor run:.+/g, "").trim();
   return clean.length > max ? clean.slice(0, max) + "…" : clean;
 }
@@ -112,18 +115,27 @@ function ThesesPanel({ theses }: { theses: Thesis[] }) {
         <p className="text-zinc-600 text-xs">No theses yet.</p>
       )}
 
-      {sorted.map((t) => {
+      {sorted.map((t, idx) => {
         const score = roiScore(t);
         const c = roiColor(score);
+        const isTop = idx === 0 && score >= 5;
         return (
-          <div
+          <MagicCard
             key={t.id}
-            className={`bg-[#111111] border border-[#1e1e1e] border-l-2 ${c.border} rounded-lg p-4 ${t.james_veto ? "opacity-30" : ""}`}
+            className={`border-l-2 ${c.borderL} p-4 ${t.james_veto ? "opacity-30" : ""}`}
+            gradientColor={c.gradient}
           >
+            {isTop && (
+              <BorderBeam
+                size={60}
+                duration={8}
+                colorFrom="#10b981"
+                colorTo="#6366f1"
+              />
+            )}
             {/* Top row */}
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="flex items-center gap-2 flex-1 min-w-0">
-                {/* ROI score */}
                 <span className={`text-xs font-bold px-1.5 py-0.5 rounded tabular-nums shrink-0 ${c.badge}`}>
                   {score.toFixed(1)}
                 </span>
@@ -159,7 +171,7 @@ function ThesesPanel({ theses }: { theses: Thesis[] }) {
                 checked {shortDate(t.last_checked)}
               </p>
             )}
-          </div>
+          </MagicCard>
         );
       })}
     </section>
@@ -169,7 +181,6 @@ function ThesesPanel({ theses }: { theses: Thesis[] }) {
 // ── Panel: Agent Tasks ────────────────────────────────────────────────────────
 
 function AgentTasksPanel({ tasks }: { tasks: AgentTask[] }) {
-  // Group by team, preserve order
   const grouped: Record<string, AgentTask[]> = {};
   for (const t of tasks) {
     const key = t.team ?? "other";
@@ -182,7 +193,6 @@ function AgentTasksPanel({ tasks }: { tasks: AgentTask[] }) {
     ...Object.keys(grouped).filter((k) => !TEAM_ORDER.includes(k)),
   ];
 
-  // Active count
   const active = tasks.filter((t) => t.status === "in_progress" || t.status === "pending").length;
 
   return (
@@ -200,13 +210,12 @@ function AgentTasksPanel({ tasks }: { tasks: AgentTask[] }) {
 
       {teamKeys.map((team) => {
         const teamTasks = grouped[team];
-        // Show active/pending first, then completed (dimmed)
-        const active = teamTasks.filter((t) => t.status !== "completed");
+        const activeTasks = teamTasks.filter((t) => t.status !== "completed");
         const done = teamTasks.filter((t) => t.status === "completed");
-        const display = [...active, ...done];
+        const display = [...activeTasks, ...done];
 
         return (
-          <div key={team} className="bg-[#111111] border border-[#1e1e1e] rounded-lg overflow-hidden">
+          <MagicCard key={team} className="overflow-hidden" gradientColor="#161616">
             {/* Team header */}
             <div className="px-4 py-2 border-b border-[#1a1a1a] bg-[#0d0d0d]">
               <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -241,7 +250,7 @@ function AgentTasksPanel({ tasks }: { tasks: AgentTask[] }) {
                 );
               })}
             </div>
-          </div>
+          </MagicCard>
         );
       })}
     </section>
@@ -251,7 +260,6 @@ function AgentTasksPanel({ tasks }: { tasks: AgentTask[] }) {
 // ── Panel: Human TODOs ────────────────────────────────────────────────────────
 
 function HumanTodosPanel({ todos }: { todos: HumanTodo[] }) {
-  // Sort: P1 first, then P2, then P3. Done items at bottom.
   const order: Record<TodoPriority, number> = { P1: 0, P2: 1, P3: 2 };
   const sorted = [...todos].sort((a, b) => {
     const aDone = a.status === "done" ? 1 : 0;
@@ -278,11 +286,20 @@ function HumanTodosPanel({ todos }: { todos: HumanTodo[] }) {
       {sorted.map((todo, i) => {
         const isDone = todo.status === "done";
         const key = todo.id ?? `${todo.priority}-${i}`;
+        const isP1 = todo.priority === "P1" && !isDone;
         return (
-          <div
+          <MagicCard
             key={key}
-            className={`bg-[#111111] border border-[#1e1e1e] border-l-2 ${P_BORDER[todo.priority]} rounded-lg p-4 ${isDone ? "opacity-30" : ""}`}
+            className={`border-l-2 ${P_BORDER_L[todo.priority]} p-4 ${isDone ? "opacity-30" : ""}`}
+            gradientColor={isP1 ? "#200a0a" : "#111111"}
           >
+            {isP1 && (
+              <ShineBorder
+                borderWidth={1}
+                duration={10}
+                shineColor={["#ef4444", "#f97316"]}
+              />
+            )}
             <div className="flex items-start gap-2 mb-1.5">
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${P_BADGE[todo.priority]}`}>
                 {todo.priority}
@@ -300,7 +317,7 @@ function HumanTodosPanel({ todos }: { todos: HumanTodo[] }) {
                 deadline: {todo.deadline}
               </p>
             )}
-          </div>
+          </MagicCard>
         );
       })}
     </section>
@@ -327,7 +344,11 @@ export default async function Dashboard() {
       {/* Header */}
       <header className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-lg font-bold text-white tracking-tight">Agent OS</h1>
+          <h1 className="text-lg font-bold tracking-tight">
+            <AnimatedGradientText colorFrom="#a78bfa" colorTo="#38bdf8" speed={0.5}>
+              Agent OS
+            </AnimatedGradientText>
+          </h1>
           <div className="flex items-center gap-3 mt-0.5">
             <p className="text-zinc-600 text-xs">
               {meta.session_count} sessions · {updatedAt}
@@ -343,7 +364,7 @@ export default async function Dashboard() {
 
       {/* Next session banner */}
       {meta.next_session_instruction && (
-        <div className="mb-6 bg-[#111111] border border-[#1e1e1e] border-l-2 border-l-blue-600 rounded-lg px-4 py-3">
+        <div className="mb-6 bg-[#111111] border border-[#1e1e1e] border-l-2 border-l-blue-600 rounded-xl px-4 py-3">
           <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Next session</p>
           <p className="text-zinc-300 text-xs leading-relaxed">{meta.next_session_instruction}</p>
         </div>
